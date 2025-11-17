@@ -1,5 +1,6 @@
 from utils.model_viewer import main, Live2DViewer
 from utils.toxic_eval import MultilingualToxicityEvaluator
+from utils.analyse import EmotionActivityAnalyzer
 from utils import split_sentence
 import os
 import time
@@ -9,6 +10,8 @@ _initialized = False
 _viewer_thread = None
 
 _toxicity_evaluator = MultilingualToxicityEvaluator(model_type="multilingual")
+_Emotion_Analyser = EmotionActivityAnalyzer(late_hour_start=22,
+                                            late_hour_end=6)
 
 
 def _del_old_wav(dossier):
@@ -91,3 +94,9 @@ def send_text(texts: str):
 def is_ready() -> bool:
     """Vérifier si le VTuber est prêt."""
     return _initialized
+
+def receive_text(texts: str):
+    #process LLM here 
+    
+    _Emotion_Analyser.report_msg(texts)
+    

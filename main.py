@@ -16,6 +16,8 @@ print("[MAIN] Vtuber lancé.")
 
 time.sleep(1)
 vtuber.send_text(WARNING[language()])
+
+
 """
 def handle_transcription(text):
     "callback pour gérer la transcription reçue"
