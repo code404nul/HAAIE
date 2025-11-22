@@ -1,6 +1,7 @@
 from utils.model_viewer import main, Live2DViewer
 from utils.toxic_eval import MultilingualToxicityEvaluator
-from utils.analyse import EmotionActivityAnalyzer
+from utils.llm import Gemma3
+from utils.prompter import format_system_prompt
 from utils import split_sentence
 import os
 import time
@@ -9,14 +10,16 @@ import threading
 _initialized = False
 _viewer_thread = None
 
+_chat = Gemma3.GemmaGGUFChat(n_gpu_layers=-1)
 _toxicity_evaluator = MultilingualToxicityEvaluator(model_type="multilingual")
+"""
 _Emotion_Analyser = EmotionActivityAnalyzer(late_hour_start=22,
                                             late_hour_end=6)
-
+"""
 
 def _del_old_wav(dossier):
     maintenant = time.time()
-    delete_before = 60 # secondes
+    delete_before = 60*9 # secondes
 
     for nom_fichier in os.listdir(dossier):
         if nom_fichier.lower().endswith(".wav"):
@@ -70,6 +73,9 @@ def send_text(texts: str):
         texts: Texte pour l'analyse émotionnelle
     """
     _del_old_wav(os.getcwd())
+    print("[INFO] generation : that could take a lot of time... please wait")
+    texts = _chat.generate_response(format_system_prompt(texts, "arch"), temperature=1.5, stream=False).replace("*", "")
+    print(texts)
     
     if not _initialized:
         print("[VTuber] Erreur: Appelez vtuber.init() d'abord!")
@@ -98,5 +104,5 @@ def is_ready() -> bool:
 def receive_text(texts: str):
     #process LLM here 
     
-    _Emotion_Analyser.report_msg(texts)
-    
+    #_Emotion_Analyser.report_msg(texts)
+    pass

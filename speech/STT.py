@@ -114,7 +114,6 @@ def transcription_worker(audio_queue, stop_event, callback=None):
         "language": "fr",  # Spécifier la langue pour accélérer
         "beam_size": 5,  # Réduire pour plus de vitesse (défaut: 5)
         "best_of": 5,  # Réduire pour plus de vitesse (défaut: 5)
-        "temperature": 0.0,  # Désactiver le sampling pour plus de vitesse
     }
     
     print(f"🔧 Options de transcription: fp16={transcribe_options['fp16']}")
@@ -147,10 +146,12 @@ def transcription_worker(audio_queue, stop_event, callback=None):
             
         except Empty:
             continue
+        """
         except Exception as e:
             print(f"❌ Erreur pendant la transcription : {e}")
             if not audio_queue.empty():
                 audio_queue.task_done()
+        """
 
 def transcription_loop(interval=30, callback=None):
     """

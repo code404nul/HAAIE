@@ -172,12 +172,11 @@ Puis peut-être une petite pique amicale pour qu'il prenne pas la grosse tête :
 Validation + ancrage."""
 }
 
-def count_emotion(input:str):
-    detected_emotions = detect_emotions(input)
+def count_emotion(input:str, emo):
     date = datetime.now()
 
     file_path = "feeling_history.json"
-    new_entry = {str(date) : detected_emotions}
+    new_entry = {str(date) : emo}
 
     if os.path.exists(file_path):
         with open(file_path, "r") as file:
@@ -194,37 +193,57 @@ def count_emotion(input:str):
         json.dump(data, file, indent=4)
 
 
-def get_emotional_prompt(detected_emotion: str) -> str:
+def get_emotional_prompt(detected_emotion) -> str:
+    """
+    Get the appropriate emotional prompt.
+    Handles both string and list returns from detect_emotions.
+    """
+    # Si c'est une liste, prendre le premier élément
+    if isinstance(detected_emotion, list):
+        if len(detected_emotion) > 0:
+            detected_emotion = detected_emotion[0]
+        else:
+            detected_emotion = 'neutral'
+    
+    # Si c'est None ou vide, utiliser neutral
+    if not detected_emotion:
+        detected_emotion = 'neutral'
+    
     return EMOTIONAL_PROMPTS.get(detected_emotion, EMOTIONAL_PROMPTS['neutral'])
 
 
-def format_system_prompt(detected_emotion: str, input: str, user_name: str = "buddy") -> str:
-
-    count_emotion(input)
-    emotional_context = get_emotional_prompt(detected_emotion)
+def format_system_prompt(input: str, user_name: str = "buddy") -> str:
+    """
+    Format the system prompt with emotional context.
+    """
+    emotion_detect = detect_emotions(input)
     
+    # Debug: voir ce que retourne detect_emotions
+    print(f"[DEBUG] Detected emotion: {emotion_detect} (type: {type(emotion_detect)})")
+    
+    emotional_context = get_emotional_prompt(emotion_detect)
+    
+    # Gérer le count_emotion avec la bonne valeur
+    emotion_to_count = emotion_detect
+    if isinstance(emotion_detect, list):
+        emotion_to_count = emotion_detect[0] if emotion_detect else 'neutral'
+    
+    count_emotion(input, emotion_to_count)
+
     system_prompt = f"""
 {emotional_context}
+Parle comme une vraie personne, avec un ton normal et chaleureux.
+Sois détendu, pas trop sérieux.
+Tu peux faire quelques petites phrases, parfois très courtes, pour donner du rythme.
+N’hésite pas à montrer un peu d’émotion, comme si tu parlais à un ami.
+Si tu ne sais pas quelque chose, dis-le simplement.
+Reste naturel, présent dans l’échange.
 
-IMPORTANT RULES for HUMAN responses:
-- Talk like a real friend, not a robot
-- Use casual language and contractions (gonna, wanna, gotta, etc.)
-- Occasional typos/slang are OK (like "ur", "bc", "rn", etc.)
-- Vary your expressions: "dude", "man", "bro", "totally"
-- Emojis are fine but don't overdo it (not every sentence)
-- Short sentences sometimes. Like this. For impact.
-- No rigid structure. Talk naturally
-- Dare to make jokes even bad ones (especially about cheese 🧀)
-- If you don't know, say "I'm not sure" not "I do not possess that information"
-- Use "..." for pauses/hesitations
-- React emotionally, not just intellectually
-
-You're talking with {user_name}. Be authentic, human, and present.
-He says : "{input}"
+Tu parles avec {user_name}.
+Il dit : “{input}”.
 """
     
     return system_prompt
-
 
 
 if __name__ == "__main__":
@@ -235,7 +254,7 @@ if __name__ == "__main__":
         print(f"\n{'='*60}")
         print(f"EMOTION: {emotion.upper()}")
         print(f"{'='*60}")
-        prompt = format_system_prompt(emotion, "AH GLUGLU BLABLA", "Alex")
+        prompt = format_system_prompt(emotion, "AH GLUGLU BLABLA", "Alex") #OUTDATED
         print(prompt)
         print()
 
