@@ -19,7 +19,7 @@ time.sleep(1)
 
 def handle_transcription(text):
     "callback pour gérer la transcription reçue"
-    
+    print(f"[MAIN] Depuis main la transcription est : {text}")
     is_success = vtuber.send_text(text)
 
     print(f"[MAIN] Transcription received : {text[15:]}... !")
@@ -27,8 +27,8 @@ def handle_transcription(text):
         handle_transcription(text)
 
 thread = threading.Thread(
-    target=transcription_loop,
-    args=(10, handle_transcription),
+    target=transcription_loop, 
+    args=(30, handle_transcription),
     daemon=True
 )
 

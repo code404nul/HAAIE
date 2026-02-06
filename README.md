@@ -115,6 +115,8 @@ python test.py
 3. Live2D animation → Visual feedback
 4. (Planned) Speech-to-text + LLM → Intelligent reply
 5. (Planned) TTS → Voice output
+6. Emotionnal detection Speech
+7. Detect unhealthy attachement
 ---
 
 ## 🚀 Roadmap
@@ -164,3 +166,6 @@ It makes no therapeutic claims and does not provide diagnosis
 or treatment.
 
 Data stored locally only. (Onlu emotions can be stored, no any conversations)
+
+IA can be not accurate, use this caution. 
+18 under-age, please don't use. 

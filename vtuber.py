@@ -1,3 +1,22 @@
+import os
+import sys
+
+# SET OFFLINE MODE BEFORE ANY IMPORTS - CRITICAL!
+os.environ['HF_HUB_OFFLINE'] = '1'
+os.environ['TRANSFORMERS_OFFLINE'] = '1'
+os.environ['HF_DATASETS_OFFLINE'] = '1'
+os.environ['HF_HUB_DISABLE_TELEMETRY'] = '1'
+
+# Monkey-patch transformers BEFORE import to force local_files_only
+import transformers.utils.hub as hub_utils
+original_cached_file = hub_utils.cached_file
+
+def patched_cached_file(*args, **kwargs):
+    kwargs['local_files_only'] = True
+    return original_cached_file(*args, **kwargs)
+
+hub_utils.cached_file = patched_cached_file
+
 from utils.model_viewer import main, Live2DViewer
 from utils.toxic_eval import MultilingualToxicityEvaluator
 from utils.llm import Gemma3
@@ -74,8 +93,8 @@ def send_text(texts: str):
     """
     _del_old_wav(os.getcwd())
     print("[INFO] generation : that could take a lot of time... please wait")
-    texts = _chat.generate_response(format_system_prompt(texts, "arch"), temperature=1.5, stream=False).replace("*", "")
-    print(texts)
+    texts = _chat.generate_response(format_system_prompt(texts, "arch"), temperature=1.5, stream=True).replace("*", "")
+    print(texts) # *TODO* Reflexction sur le threading, qu'il débite et envoye
     
     if not _initialized:
         print("[VTuber] Erreur: Appelez vtuber.init() d'abord!")
