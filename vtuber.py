@@ -91,29 +91,37 @@ def send_text(texts: str):
     Args:
         texts: Texte pour l'analyse émotionnelle
     """
-    _del_old_wav(os.getcwd())
-    print("[INFO] generation : that could take a lot of time... please wait")
-    texts = _chat.generate_response(format_system_prompt(texts, "arch"), temperature=1.5, stream=True).replace("*", "")
-    print(texts) # *TODO* Reflexction sur le threading, qu'il débite et envoye
-    
     if not _initialized:
         print("[VTuber] Erreur: Appelez vtuber.init() d'abord!")
         return False
     
-    try:
-        if _toxicity_evaluator.filter_toxic_content(texts)["toxic"]:
-            print("[VTuber] Texte détecté comme toxique. Abandon.")
-            return False
-        else:
-            texts = split_sentence(texts)
-            texts = [partie.strip() for element in texts for partie in element.split(',')]
-
-            for text in texts:
-                Live2DViewer.send_text(text)
-            return True
-    except Exception as e:
-        print(f"[VTuber] Erreur lors de l'envoi du texte: {e}")
+    if texts.replace(' ', "") == "":
+        print("[VTuber] Texte vide, rien à envoyer.")
         return False
+    
+    _del_old_wav(os.getcwd())
+
+    print("[INFO] generation : that could take a lot of time... please wait")
+    chucks = []
+    for chuck in _chat.generate_response(format_system_prompt(texts, "arch").replace("*", ""), temperature=0.6, stream=True):
+        chucks.append(chuck)
+        if any(punctuation in chuck for punctuation in ["!", ".", "?", ":"]):
+            sentence = "".join(chucks)
+            print(sentence, end="", flush=True)
+            chucks = []
+
+            try:
+                if _toxicity_evaluator.filter_toxic_content(sentence)["toxic"]:
+                    print("[VTuber] Texte détecté comme toxique. Abandon.")
+                    return False
+                else:
+                    Live2DViewer.send_text(sentence)
+            except Exception as e:
+                print(f"[VTuber] Erreur lors de l'envoi du texte: {e}")
+                return False
+
+    return True
+
 
 
 def is_ready() -> bool:
@@ -125,3 +133,9 @@ def receive_text(texts: str):
     
     #_Emotion_Analyser.report_msg(texts)
     pass
+
+print(format_system_prompt("bonjour", "arch"))
+"""
+strat = time.time()
+for chuck in _chat.generate_response(format_system_prompt("bonjour", "arch").replace("*", ""), temperature=0.6, stream=True):
+    print(time.time() - strat)"""
