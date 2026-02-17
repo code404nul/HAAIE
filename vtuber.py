@@ -133,9 +133,3 @@ def receive_text(texts: str):
     
     #_Emotion_Analyser.report_msg(texts)
     pass
-
-print(format_system_prompt("bonjour", "arch"))
-"""
-strat = time.time()
-for chuck in _chat.generate_response(format_system_prompt("bonjour", "arch").replace("*", ""), temperature=0.6, stream=True):
-    print(time.time() - strat)"""
