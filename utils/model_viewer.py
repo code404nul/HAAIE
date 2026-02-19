@@ -654,7 +654,7 @@ class Live2DViewer:
 
 def main():
     """Entry point for the Live2D viewer."""
-    model_manager = ModelManager("llny")
+    model_manager = ModelManager("keserannpasarann")
     viewer = Live2DViewer(model_manager)
 
     try:

@@ -107,6 +107,7 @@ def send_text(texts: str):
         chucks.append(chuck)
         if any(punctuation in chuck for punctuation in ["!", ".", "?", ":"]):
             sentence = "".join(chucks)
+            sentence = sentence.replace("*", "")
             print(sentence, end="", flush=True)
             chucks = []
 

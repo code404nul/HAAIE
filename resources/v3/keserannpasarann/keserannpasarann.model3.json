@@ -1,0 +1,53 @@
+{
+	"Version": 3,
+	"FileReferences": {
+		"Moc": "keserannpasarann.moc3",
+		"Textures": [
+			"textures/texture_00.png"
+		],
+        "Expressions": [
+            {
+                "Name": "embarrassed",
+                "File": "expressions/1.exp3.json"
+            },
+            {
+                "Name": "angry",
+                "File": "expressions/2.exp3.json"
+            },
+            {
+                "Name": "impressed/dreamer",
+                "File": "expressions/3.exp3.json"
+            },
+            {
+                "Name": "emu",
+                "File": "expressions/4.exp3.json"
+            },
+            {
+                "Name": "realizing",
+                "File": "expressions/5.exp3.json"
+            },
+            {
+                "Name": "shy/neutral",
+                "File": "expressions/6.exp3.json"
+            },
+            {
+                "Name": "idle",
+                "File": "expressions/idle.exp3.json"
+            }
+        ],
+		"Physics": "keserannpasarann.physics3.json",
+		"DisplayInfo": "keserannpasarann.cdi3.json"
+	},
+	"Groups": [
+		{
+			"Target": "Parameter",
+			"Name": "LipSync",
+			"Ids": []
+		},
+		{
+			"Target": "Parameter",
+			"Name": "EyeBlink",
+			"Ids": []
+		}
+	]
+}

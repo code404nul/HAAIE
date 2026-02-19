@@ -17,12 +17,14 @@ class ModelManager:
         "llny": "resources/v3/llny/llny.model3.json",
         "mao": "resources/v3/Mao/Mao.model3.json",
         "nn": "resources/v3/nn/nn.model3.json",
+        "ahiru": "resources/v3/ahiru/ahiru.model3.json",
+        "keserannpasarann": "resources/v3/keserannpasarann/keserannpasarann.model3.json",
     }
     
     @classmethod
     def available_models(cls) -> str: return cls._MODEL_PATHS.keys()
 
-    def __init__(self, name: str = "nn") -> None:
+    def __init__(self, name: str = "keserannpasarann") -> None:
         """
         La liste des noms de modèles disponible -> ModelManager.available_models()
         Var : 
