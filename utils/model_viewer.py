@@ -20,6 +20,7 @@ from utils.emotion.get_emotion import corresp_emotion
 from utils import lenght_to_duration
 
 from speech.TTS import init_model_TTS, synthesize_audio
+from utils.gaze_animator import GazeAnimator
 
 
 @dataclass
@@ -286,6 +287,9 @@ class Live2DViewer:
         self.ai_text_surface = None
         self.mouse_pos: tuple = (self.config.width // 2, self.config.height // 2)
 
+        # Un GazeAnimator par modèle avec apply_head_direction=True
+        self.gaze_animators: dict[str, GazeAnimator] = {}
+
     # ------------------------------------------------------------------
     # Singleton / API externe
     # ------------------------------------------------------------------
@@ -343,6 +347,15 @@ class Live2DViewer:
             live2d.glewInit()
 
         self._load_all_models()
+
+        # Créer un GazeAnimator pour chaque modèle avec suivi de tête
+        for cfg in self.scene_models_configs:
+            if cfg.apply_head_direction:
+                self.gaze_animators[cfg.model_id] = GazeAnimator(
+                    screen_width=self.config.width,
+                    screen_height=self.config.height,
+                )
+                print(f'[Viewer] GazeAnimator créé pour {cfg.model_id}')
 
         self.wavHandler = WavHandler()
         self.font = pygame.font.Font(None, 48)
@@ -423,6 +436,11 @@ class Live2DViewer:
                 main.set_expression(emotion_id)
                 print(f"[Main] Expression appliquée sur {self.main_model_id}: {emotion_id}")
 
+            # Propager l'émotion à tous les GazeAnimators
+            if emotion_id:
+                for animator in self.gaze_animators.values():
+                    animator.set_expression(emotion_id)
+
             self.current_audio_path = audio_path
             self.current_emotion_id = emotion_id
             self.audio_start_time = time.time()
@@ -443,6 +461,11 @@ class Live2DViewer:
             main = self.main_scene_model
             if main:
                 main.reset_expression()
+
+            # Remettre le regard en mode idle
+            for animator in self.gaze_animators.values():
+                animator.set_expression("idle")
+
             self.current_audio_path = None
             self.current_emotion_id = None
             self.audio_start_time = None
@@ -616,8 +639,15 @@ class Live2DViewer:
 
             # Mise à jour de tous les modèles
             for sm in sorted_scene_models:
-                mouse = self.mouse_pos if sm.config.apply_head_direction else None
-                sm.update(self.transform.rotation, mouse)
+                if sm.config.apply_head_direction:
+                    animator = self.gaze_animators.get(sm.config.model_id)
+                    if animator:
+                        gaze_pos = animator.update(self.mouse_pos)
+                    else:
+                        gaze_pos = self.mouse_pos
+                else:
+                    gaze_pos = None
+                sm.update(self.transform.rotation, gaze_pos)
 
             # Rendu : arrière-plan → premier plan
             live2d.clearBuffer(*self.config.background_color)
