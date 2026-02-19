@@ -24,11 +24,11 @@ from speech.TTS import init_model_TTS, synthesize_audio
 @dataclass
 class ViewConfig:
     """Configuration for the Live2D viewer."""
-    width: int = 500
-    height: int = 600
+    width: int = 800
+    height: int = 1000
     title: str = "Live2D Viewer"
     frame_delay: int = 10
-    background_color: tuple[float, float, float, float] = (1.0, 0.0, 0.0, 0.0)
+    background_color: tuple[float, float, float, float] = (0.0, 0.0, 0.0, 0.0)  # Transparent pour le dégradé
 
 
 @dataclass
@@ -468,8 +468,7 @@ class Live2DViewer:
     def _handle_mouse_motion(self, pos: tuple[int, int]) -> None:
         """Handle mouse motion."""
         self.model.Drag(*pos)
-        
-        
+
     def _apply_transformations(self) -> None:
         """Apply transformations."""
         self.transform.rotation += self.transform.rotation_speed
@@ -479,6 +478,45 @@ class Live2DViewer:
         self.model.SetOffset(self.transform.dx, self.transform.dy)
         self.model.SetScale(self.transform.scale)
 
+    def _render_gradient(self) -> None:
+        """Dessine un dégradé violet (haut-gauche) → bleu (bas-droite) en fond."""
+        from OpenGL.GL import (
+            glMatrixMode, glLoadIdentity, glOrtho, GL_PROJECTION, GL_MODELVIEW,
+            glBegin, glEnd, glVertex2f, glColor4f, GL_QUADS,
+            glEnable, glDisable, GL_BLEND, glBlendFunc,
+            GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA
+        )
+
+        glMatrixMode(GL_PROJECTION)
+        glLoadIdentity()
+        glOrtho(0, self.config.width, self.config.height, 0, -1, 1)
+        glMatrixMode(GL_MODELVIEW)
+        glLoadIdentity()
+
+        glEnable(GL_BLEND)
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+
+        w, h = self.config.width, self.config.height
+
+        # Violet (haut-gauche)  #7B2FBE → (0.48, 0.18, 0.74)
+        # Bleu   (bas-droite)   #1A6FD4 → (0.10, 0.44, 0.83)
+        # Intermédiaire (coins restants) pour un dégradé diagonal naturel
+
+        glBegin(GL_QUADS)
+        glColor4f(0.48, 0.18, 0.74, 1.0)  # haut-gauche  — violet
+        glVertex2f(0, 0)
+
+        glColor4f(0.29, 0.31, 0.79, 1.0)  # haut-droite  — intermédiaire
+        glVertex2f(w, 0)
+
+        glColor4f(0.10, 0.44, 0.83, 1.0)  # bas-droite   — bleu
+        glVertex2f(w, h)
+
+        glColor4f(0.29, 0.31, 0.79, 1.0)  # bas-gauche   — intermédiaire
+        glVertex2f(0, h)
+        glEnd()
+
+        glDisable(GL_BLEND)
 
     def _render_ai_label(self) -> None:
         """Affiche le label 'AI' en bas à droite avec OpenGL."""
@@ -578,6 +616,7 @@ class Live2DViewer:
             
             # Rendu
             live2d.clearBuffer(*self.config.background_color)
+            self._render_gradient()  # Dégradé violet → bleu
             self.model.Draw()
             
             # Afficher le label "AI"
