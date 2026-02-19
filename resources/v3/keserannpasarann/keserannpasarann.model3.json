@@ -7,6 +7,10 @@
 		],
         "Expressions": [
             {
+                "Name": "shy/neutral",
+                "File": "expressions/6.exp3.json"
+            },
+            {
                 "Name": "embarrassed",
                 "File": "expressions/1.exp3.json"
             },
@@ -25,10 +29,6 @@
             {
                 "Name": "realizing",
                 "File": "expressions/5.exp3.json"
-            },
-            {
-                "Name": "shy/neutral",
-                "File": "expressions/6.exp3.json"
             },
             {
                 "Name": "idle",
