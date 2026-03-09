@@ -273,7 +273,7 @@ Phrases courtes. Naturel.
 def count_emotion(input: str, emo: str):
     """Enregistre l'émotion détectée dans l'historique."""
     date = datetime.now()
-    file_path = "feeling_history.json"
+    file_path = "stats_user/feeling_history.json"
     new_entry = {str(date): emo}
 
     if os.path.exists(file_path):
