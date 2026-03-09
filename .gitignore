@@ -8,3 +8,5 @@
 /long_term_memory/__pycache__
 /utils/emotion/__pycache__
 config.json
+/dashboard/node_modules
+/dashboard/package-lock.json
