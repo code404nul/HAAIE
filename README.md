@@ -19,8 +19,8 @@ It’s *not* meant to replace human interaction, but to help users **relearn com
 * 🗣️ **Conversational companion**: Interact naturally with emotion-based feedback.
 * 🔒 **Privacy first**: Everything runs **locally** (no cloud, no data collection).
 * 🧍‍♀️ **Humanized interface**: Live2D-based Vtuber for visual expression.
-* 🧩 **Lightweight and accessible**: Optimized for low-resource systems.
-* 🧘‍♂️ **Emotional support**: Non-judgmental presence to help practice communication.
+* 🧩 **Lightweight and accessible**: Optimized for "low-resource" systems. (16gb vram recommanded)
+* 🧘‍♂️ **Emotional support**: Non-judgmental presence to help practice communication/chat bot with a personnality
 
 ---
 
@@ -62,17 +62,23 @@ twitter-roberta-base-irony
 
 ```
 fr/fr_FR/upmc/medium/fr_FR-upmc-medium.onnx
-fr/fr_FR/upmc/medium/fr_FR-upmc-medium.onnx.json
 ```
 
-These include:
+### 🧍‍♀️ LLM persona
 
-* `MODEL_CARD`
-* Example voice samples (`speaker_0.mp3`, `speaker_1.mp3`)
+```
+Gemma3-12b-it-QAT_4b (subject to possible change)
+```
+
+### Detector of emotionnal dependancy
+
+```
+Phi-4-mini-QAT_4b 
+```
 
 ---
 
-## 🧰 Installation & Run
+## 🧰 Installation & Run / main script
 
 ### 1. Clone the repository
 
@@ -97,38 +103,38 @@ pip install -r requirements.txt
 ### 4. Run the test script
 
 ```bash
-python test.py
+python main.py
 ```
 
 ### 5. Download models 
 
-[link of the drive](https://drive.google.com/drive/folders/1xmPeIi9dzqERD8u6cl4wBQzBhvR0C0Oh?usp=sharing)
+<!-- [link of the drive](https://drive.google.com/drive/folders/1xmPeIi9dzqERD8u6cl4wBQzBhvR0C0Oh?usp=sharing) --->
 
----
+## 🧰 Installation & Run / emmotionnal dashboard
 
-## 🧠 Architecture Summary
 
-**Pipeline:**
+### Prerequisites
 
-1. User input → Emotion detection
-2. Emotion classification → Expression control
-3. Live2D animation → Visual feedback
-4. (Planned) Speech-to-text + LLM → Intelligent reply
-5. (Planned) TTS → Voice output
-6. Emotionnal detection Speech
-7. Detect unhealthy attachement
----
+* Node.js (version 16 or higher recommended)
+* npm (included with Node.js)
 
-## 🚀 Roadmap
+1. **Install the dependencies**
 
-| Feature            | Status         | Notes                             |
-| ------------------ | -------------- | --------------------------------- |
-| Expression mapping | ✅ Done        | Based on sentence analysis        |
-| Live2D integration | ✅ Done        | Animated avatar                   |
-| Voice output       | ✅ Done        | Local TTS via Piper               |
-| Offline LLM        | 🔜 Planned     | Compact conversational model      |
-| Emotion dataset    | 🧩 In progress | Based on Reddit/Discord data      |
-| Code optimization  | 🚧 Planned     | Improve modularity and efficiency |
+   ```bash
+   npm install
+   ```
+
+### Launch the Dashboard
+
+1. **Start the development server**
+
+   ```bash
+   npm run dev
+   ```
+
+2. **Access the Dashboard**
+   Open your browser at the indicated address.
+
 
 ---
 
@@ -168,4 +174,4 @@ or treatment.
 Data stored locally only. (Onlu emotions can be stored, no any conversations)
 
 IA can be not accurate, use this caution. 
-18 under-age, please don't use. 
+18 under-age, please don't use.
