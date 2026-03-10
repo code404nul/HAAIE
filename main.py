@@ -1,4 +1,4 @@
-from speech.STT import transcription_loop
+from utils.speech.STT import transcription_loop
 from utils.config_manager import language
 
 import vtuber

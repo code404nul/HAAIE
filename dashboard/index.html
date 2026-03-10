@@ -109,8 +109,108 @@
 </header>
 
 <main>
-
   <div>
+    <div class="sec">Dépendance émotionnelle</div>
+
+    <!-- Row 1 : KPIs -->
+    <div class="row cols-4" style="margin-bottom:1.25rem">
+
+      <div class="card">
+        <div class="card-head">
+          <div class="card-title">Score actuel</div>
+          <div class="card-badge" id="dep-niveau-badge">—</div>
+        </div>
+        <div class="kpi-value" id="dep-score">—</div>
+        <div class="kpi-sub" id="dep-niveau">—</div>
+        <div class="mood-bar-wrap">
+          <div class="mood-bar-labels"><span>Sain</span><span>50</span><span>Critique</span></div>
+          <div class="mood-bar-track">
+            <div class="mood-bar-needle" id="dep-bar-fill" style="left:0%;border-color:#94a3b8"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><div class="card-title">Score moyen</div><div class="card-badge badge-neu">période</div></div>
+        <div class="kpi-value" id="dep-avg">—</div>
+        <div class="kpi-sub">moyenne sur toutes les entrées</div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><div class="card-title">Score max détecté</div><div class="card-badge badge-neg">pic</div></div>
+        <div class="kpi-value" id="dep-max" style="color:var(--neg)">—</div>
+        <div class="kpi-sub" id="dep-max-date">—</div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><div class="card-title">Entrées critiques</div><div class="card-badge badge-neg">score ≥ 70</div></div>
+        <div class="kpi-value" id="dep-critical" style="color:var(--neg)">—</div>
+        <div class="kpi-sub" id="dep-critical-pct">— % des analyses</div>
+      </div>
+
+    </div>
+
+    <!-- Row 2 : Trend + Niveau distribution -->
+    <div class="row cols-3-2" style="margin-bottom:1.25rem">
+      <div class="card">
+        <div class="card-head">
+          <div class="card-title">Évolution du score dans le temps</div>
+          <div class="card-badge badge-neu">ligne + seuils</div>
+        </div>
+        <div class="chart-wrap" style="height:220px"><canvas id="chart-dep-trend"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><div class="card-title">Répartition des niveaux</div></div>
+        <div class="chart-wrap" style="height:220px"><canvas id="chart-dep-niveau"></canvas></div>
+      </div>
+    </div>
+
+    <!-- Row 3 : Indicateurs fréquence + heatmap horaire -->
+    <div class="row cols-2" style="margin-bottom:1.25rem">
+      <div class="card">
+        <div class="card-head">
+          <div class="card-title">Fréquence des indicateurs détectés</div>
+          <div class="card-badge badge-neg">occurrences</div>
+        </div>
+        <div class="chart-wrap" style="height:240px"><canvas id="chart-dep-indicators"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><div class="card-title">Score moyen par heure de la journée</div></div>
+        <div class="chart-wrap" style="height:240px"><canvas id="chart-dep-hour"></canvas></div>
+      </div>
+    </div>
+
+    <!-- Row 4 : Indicateurs actifs + explication -->
+    <div class="row cols-2" style="margin-bottom:1.25rem">
+      <div class="card">
+        <div class="card-head">
+          <div class="card-title">Indicateurs — dernière analyse</div>
+          <div class="card-badge badge-neg" id="dep-ind-count">—</div>
+        </div>
+        <div id="dep-indicators" style="display:flex;flex-wrap:wrap;gap:.4rem;margin-bottom:.75rem"></div>
+        <div style="border-top:1px solid var(--border);padding-top:.75rem;margin-top:.25rem">
+          <div class="card-title" style="margin-bottom:.4rem">Explication</div>
+          <div id="dep-explication" style="font-size:.72rem;color:var(--muted);line-height:1.8;font-style:italic"></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-head"><div class="card-title">Score moyen par niveau</div></div>
+        <div id="dep-niveau-breakdown" style="display:flex;flex-direction:column;gap:.6rem;margin-top:.25rem"></div>
+      </div>
+    </div>
+
+    <!-- Row 5 : Timeline complète -->
+    <div class="row">
+      <div class="card">
+        <div class="card-head">
+          <div class="card-title">Historique complet — dépendance émotionnelle</div>
+          <div class="card-badge badge-neu" id="dep-total-badge">—</div>
+        </div>
+        <div id="dep-timeline" style="display:flex;flex-direction:column;gap:.5rem;max-height:380px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--border) transparent"></div>
+      </div>
+    </div>
+
+  </div>
     <div class="sec">Résumé global</div>
     <div class="row cols-4">
       <div class="card">

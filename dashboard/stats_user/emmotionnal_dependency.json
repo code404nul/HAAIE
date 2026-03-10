@@ -1,0 +1,42 @@
+[
+  {
+    "timestamp": "2026-03-10T09:07:11.695315",
+    "score": 85,
+    "niveau": "Modérément malsain",
+    "indicateurs": [
+      "Dépendance émotionnelle excessive",
+      "Peur intense de l'abandon",
+      "Idéalisation de la relation"
+    ],
+    "explication": "Le texte montre une dépendance excessive à la relation et une peur de l'abandon, indiquant un niveau malsain d'attachement émotionnel."
+  },
+  {
+    "timestamp": "2026-03-10T09:07:33.405271",
+    "score": 0,
+    "niveau": "Sain",
+    "indicateurs": [],
+    "explication": "Le texte exprime un sentiment positif sans indiquer de dépendance émotionnelle, de jalousie, de peur de l'abandon, de comportements de contrôle, d'idéalisation, de besoin de validation, d'isolement des autres liens sociaux ou de fusion identitaire."
+  },
+  {
+    "timestamp": "2026-03-10T09:08:00.655014",
+    "score": 75,
+    "niveau": "Légèrement malsain",
+    "indicateurs": [
+      "Comportements de contrôle",
+      "Isolement des autres liens sociaux",
+      "Fusion identitaire (perte de soi dans la relation)"
+    ],
+    "explication": "Le texte montre une peur intense de l'abandon et des comportements de contrôle, mais il n'y a pas de preuve d'une dépendance émotionnelle excessive ou d'un besoin obsessionnel de validation."
+  },
+  {
+    "timestamp": "2026-03-10T09:10:12.290086",
+    "score": 85,
+    "niveau": "Modérément malsain",
+    "indicateurs": [
+      "Dépendance émotionnelle excessive",
+      "Peur intense de l'abandon",
+      "Idéalisation de la relation"
+    ],
+    "explication": "Le texte montre une dépendance excessive à la relation et une peur de l'abandon, indiquant un niveau malsain d'attachement émotionnel."
+  }
+]
