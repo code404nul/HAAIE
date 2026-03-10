@@ -24,16 +24,6 @@ It’s *not* meant to replace human interaction, but to help users **relearn com
 
 ---
 
-## ⚙️ Current Development Status
-
-✅ Facial and expression reactions based on text
-⚙️ Live2D model integrated
-✅ Voice is integreted 
-❌ No LLM integration yet
-🚧 `main.py` is the current entry point for testing
-
----
-
 ## 🧩 Model Dependencies
 
 To run **H.A.AI.E**, you’ll need to download or clone the following models:
