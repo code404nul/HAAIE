@@ -19,7 +19,7 @@ hub_utils.cached_file = patched_cached_file
 
 from utils.model_viewer import main, Live2DViewer
 from utils.toxic_eval import MultilingualToxicityEvaluator
-from utils.llm import Gemma3
+from utils.llm import Gemma4                          # ← Gemma 4
 from utils.prompter import format_system_prompt
 from utils import split_sentence
 import os
@@ -29,16 +29,17 @@ import threading
 _initialized = False
 _viewer_thread = None
 
-_chat = Gemma3.GemmaGGUFChat(n_gpu_layers=-1)
+# Gemma 4 26B-A4B — adaptez le chemin si votre fichier est ailleurs
+_chat = Gemma4.GemmaGGUFChat(
+    model_path="models/gemma-4-26B-A4B-it-UD-Q5_K_S.gguf",
+    n_gpu_layers=-1,
+)
 _toxicity_evaluator = MultilingualToxicityEvaluator(model_type="multilingual")
-"""
-_Emotion_Analyser = EmotionActivityAnalyzer(late_hour_start=22,
-                                            late_hour_end=6)
-"""
+
 
 def _del_old_wav(dossier):
     maintenant = time.time()
-    delete_before = 60*9 # secondes
+    delete_before = 60 * 9  # secondes
 
     for nom_fichier in os.listdir(dossier):
         if nom_fichier.lower().endswith(".wav"):
@@ -50,87 +51,106 @@ def _del_old_wav(dossier):
                         os.remove(chemin_fichier)
                         print(f"supprimé : {chemin_fichier}")
                     except Exception as e:
-                        print(f"Erreur lors de la suppression de {chemin_fichier} : {e}")
+                        print(f"Erreur suppression {chemin_fichier} : {e}")
 
 
 def init(model_name: str = "mao", timeout: float = 15.0):
     """
-    Initialiser le VTuber en arrière-plan.
-    
+    Initialise le VTuber en arrière-plan.
+
     Args:
-        model_name: Nom du modèle à charger
+        model_name: Nom du modèle Live2D à charger
         timeout: Temps d'attente maximum (secondes)
     """
-    global _initialized, _viewer_thread, _model_tts
-    
-    
+    global _initialized, _viewer_thread
+
     if _initialized:
         print("[VTuber] Déjà initialisé")
         return
-    
-    print(f"[VTuber] Démarrage...")
-    
-    # Lancer le viewer en thread daemon
+
+    print("[VTuber] Démarrage...")
+
     _viewer_thread = threading.Thread(target=main, daemon=True)
     _viewer_thread.start()
-    
-    # Attendre qu'il soit prêt
+
     viewer = Live2DViewer.wait_for_instance(timeout=timeout)
-    
+
     if viewer:
         _initialized = True
-        print(f"[VTuber] ✓ Prêt!")
+        print("[VTuber] ✓ Prêt!")
     else:
-        print(f"[VTuber] ✗ Échec de l'initialisation")
+        print("[VTuber] ✗ Échec de l'initialisation")
 
 
 def send_text(texts: str):
     """
-    Envoyer un texte au VTuber.
-    
-    Args:
-        texts: Texte pour l'analyse émotionnelle
+    Envoie un texte au VTuber : génération LLM (Gemma 4) → TTS (Piper) → Live2D.
+
+    Gemma 4 peut émettre des blocs <think>…</think> que GemmaGGUFChat filtre
+    automatiquement (strip_think=True par défaut), donc le TTS ne les reçoit jamais.
     """
     if not _initialized:
-        print("[VTuber] Erreur: Appelez vtuber.init() d'abord!")
+        print("[VTuber] Erreur : appelez vtuber.init() d'abord !")
         return False
-    
-    if texts.replace(' ', "") == "":
+
+    if texts.replace(" ", "") == "":
         print("[VTuber] Texte vide, rien à envoyer.")
         return False
-    
+
     _del_old_wav(os.getcwd())
 
-    print("[INFO] generation : that could take a lot of time... please wait")
+    print("[INFO] Génération Gemma 4 en cours...")
     chucks = []
-    for chuck in _chat.generate_response(format_system_prompt(texts, "arch").replace("*", ""), temperature=0.6, stream=True):
+
+    for chuck in _chat.generate_response(
+        format_system_prompt(texts, "arch").replace("*", ""),
+        # Paramètres recommandés pour Gemma 4
+        temperature=1.0,
+        top_p=0.95,
+        top_k=64,
+        repeat_penalty=1.0,
+        stream=True,
+        strip_think=True,   # Les pensées internes ne sont jamais envoyées au TTS
+    ):
         chucks.append(chuck)
-        if any(punctuation in chuck for punctuation in ["!", ".", "?", ":"]):
-            sentence = "".join(chucks)
-            sentence = sentence.replace("*", "")
-            print(sentence, end="", flush=True)
+        # Couper la phrase aux ponctuations fortes
+        if any(p in chuck for p in ["!", ".", "?", ":"]):
+            sentence = "".join(chucks).replace("*", "").strip()
             chucks = []
+
+            if not sentence:
+                continue
+
+            print(sentence, end="", flush=True)
 
             try:
                 if _toxicity_evaluator.filter_toxic_content(sentence)["toxic"]:
-                    print("[VTuber] Texte détecté comme toxique. Abandon.")
+                    print("\n[VTuber] Contenu toxique détecté. Abandon.")
                     return False
                 else:
                     Live2DViewer.send_text(sentence)
             except Exception as e:
-                print(f"[VTuber] Erreur lors de l'envoi du texte: {e}")
+                print(f"\n[VTuber] Erreur envoi texte : {e}")
                 return False
+
+    # Émettre les éventuels restes (sans ponctuation finale)
+    if chucks:
+        sentence = "".join(chucks).replace("*", "").strip()
+        if sentence:
+            try:
+                if not _toxicity_evaluator.filter_toxic_content(sentence)["toxic"]:
+                    Live2DViewer.send_text(sentence)
+            except Exception as e:
+                print(f"\n[VTuber] Erreur envoi reste : {e}")
 
     return True
 
 
-
 def is_ready() -> bool:
-    """Vérifier si le VTuber est prêt."""
+    """Vérifie si le VTuber est prêt."""
     return _initialized
 
+
 def receive_text(texts: str):
-    #process LLM here 
-    
-    #_Emotion_Analyser.report_msg(texts)
+    # Traitement LLM ici si besoin
     pass

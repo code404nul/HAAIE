@@ -57,7 +57,7 @@ fr/fr_FR/upmc/medium/fr_FR-upmc-medium.onnx
 ### 🧍‍♀️ LLM persona
 
 ```
-Gemma3-12b-it-QAT_4b (subject to possible change)
+Gemma4 26B A4B
 ```
 
 ### Detector of emotionnal dependancy
