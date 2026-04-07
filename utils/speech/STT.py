@@ -1,342 +1,309 @@
-"""
-STT avec détection de voix en temps réel (VAD) et transcription streaming.
-
-Architecture :
-  ┌─────────────────────────────────────────────────────────────────┐
-  │  sounddevice callback (thread audio)                            │
-  │    └─► RingBuffer (audio brut, 100ms chunks)                    │
-  │          └─► VADProcessor (machine à états)                     │
-  │                ├─ SILENCE  : discard                            │
-  │                ├─ SPEAKING : accumule les chunks                 │
-  │                └─ END      : enqueue utterance ──► WhisperQueue │
-  │                                                   └─► callback  │
-  └─────────────────────────────────────────────────────────────────┘
-
-Nouveautés vs ancienne version :
-- Capture en chunks 100ms (au lieu d'enregistrements 30s bloquants)
-- VAD par énergie RMS + hystérésis (évite les faux déclenchements)
-- Transcription Whisper déclenchée automatiquement à la fin d'un énoncé
-- Callback partiel optionnel (affichage en direct du texte reconnu)
-- Timeout de sécurité : si quelqu'un parle plus de MAX_SPEECH_DURATION,
-  on force une transcription intermédiaire
-"""
-
-import threading
 import time
-import numpy as np
-import sounddevice as sd
+import threading
 import whisper
+import sounddevice as sd
+import numpy as np
 import torch
-from collections import deque
 from queue import Queue, Empty
-from dataclasses import dataclass, field
-from enum import Enum, auto
-from typing import Callable, Optional
+from collections import deque
+from typing import Optional
 
-from utils.config_manager import size_stt, device as cfg_device
+from utils.config_manager import size_stt, device
 
-# ─────────────────────────────────────────────
-# Constantes audio
-# ─────────────────────────────────────────────
+# ── Constantes (alignées sur fireredvad/core/constants.py) ──────────────────
+SAMPLE_RATE     = 16_000
+CHANNELS        = 1
+DTYPE           = "int16"    # int16 requis par FireRedVAD
+FRAME_SHIFT     = 160        # FRAME_SHIFT_SAMPLE  (10 ms)
+FRAME_LENGTH    = 400        # FRAME_LENGTH_SAMPLE (25 ms) — taille exacte de detect_frame()
+MAX_SILENCE_SEC = 5.0
+PRE_ROLL_FRAMES = 10         # ~100 ms de pre-roll
 
-SAMPLE_RATE        = 16_000      # Hz (requis par Whisper)
-CHUNK_MS           = 100         # Durée d'un chunk en ms
-CHUNK_SAMPLES      = int(SAMPLE_RATE * CHUNK_MS / 1000)  # 1600 samples
+_whisper_model = None
+_whisper_lock  = threading.Lock()
 
-# ─────────────────────────────────────────────
-# Paramètres VAD
-# ─────────────────────────────────────────────
-
-VAD_ENERGY_THRESHOLD   = 0.015   # Seuil RMS pour « est-ce de la parole ? »
-VAD_SPEECH_PAD_CHUNKS  = 3       # Chunks de marge avant/après la parole (300ms)
-VAD_SILENCE_CHUNKS     = 12      # Chunks de silence pour clore un énoncé (1.2s)
-VAD_MIN_SPEECH_CHUNKS  = 4       # Durée minimale d'une vraie prise de parole (400ms)
-MAX_SPEECH_DURATION    = 30.0    # Forcer la coupure après N secondes de parole
-
-# ─────────────────────────────────────────────
-# Modèle Whisper (singleton thread-safe)
-# ─────────────────────────────────────────────
-
-_model: Optional[whisper.Whisper] = None
-_model_lock = threading.Lock()
+_vad_model = None
+_vad_lock  = threading.Lock()
 
 
-def _load_model() -> whisper.Whisper:
-    global _model
-    with _model_lock:
-        if _model is None:
-            dev = cfg_device()
-            print(f"⏳ Chargement Whisper ({size_stt()}) sur {dev}…")
-            torch_device = "cuda" if dev == "gpu" else "cpu"
-            _model = whisper.load_model(size_stt(), device=torch_device)
-            print("✓ Whisper prêt")
-    return _model
+# ── Chargement des modèles ───────────────────────────────────────────────────
+
+def load_model():
+    """Charge le modèle Whisper une seule fois (thread-safe)."""
+    global _whisper_model
+    with _whisper_lock:
+        if _whisper_model is None:
+            device_name = device()
+            print(f"🔄 Chargement du modèle Whisper sur {device_name}…")
+            torch_device = "cuda" if device_name == "gpu" else "cpu"
+            _whisper_model = whisper.load_model(size_stt(), device=torch_device)
+            label = torch.cuda.get_device_name(0) if torch_device == "cuda" else "CPU"
+            print(f"✓ Modèle Whisper chargé sur {label}")
+    return _whisper_model
 
 
-# ─────────────────────────────────────────────
-# Machine à états VAD
-# ─────────────────────────────────────────────
-
-class _VadState(Enum):
-    SILENCE  = auto()
-    SPEAKING = auto()
-
-
-@dataclass
-class VADProcessor:
+def load_stream_vad(model_dir: str = "models/stream_VAD", use_gpu: bool = False):
     """
-    Consomme des chunks audio (numpy float32) et produit des
-    utterances complètes dans `utterance_queue`.
+    Charge FireRedStreamVad une seule fois (thread-safe).
 
-    Paramètres ajustables :
-        energy_threshold  : RMS minimum pour considérer un chunk comme « voix »
-        silence_chunks    : nb de chunks silencieux consécutifs pour clore un énoncé
-        min_speech_chunks : durée minimale pour qu'un segment soit considéré valide
-        max_speech_sec    : durée max avant coupure forcée
+    model_dir : dossier contenant model.pth.tar et cmvn.ark
+                (ex: "pretrained_models/FireRedVAD-VAD-stream-251104")
     """
+    global _vad_model
+    with _vad_lock:
+        if _vad_model is None:
+            # fireredvad est installé comme package pip — import direct
+            from fireredvad.stream_vad import FireRedStreamVad, FireRedStreamVadConfig
 
-    utterance_queue: Queue
-    energy_threshold:  float = VAD_ENERGY_THRESHOLD
-    silence_chunks:    int   = VAD_SILENCE_CHUNKS
-    min_speech_chunks: int   = VAD_MIN_SPEECH_CHUNKS
-    max_speech_sec:    float = MAX_SPEECH_DURATION
+            cfg = FireRedStreamVadConfig(
+                use_gpu            = use_gpu,
+                smooth_window_size = 5,
+                speech_threshold   = 0.5,
+                pad_start_frame    = 5,
+                min_speech_frame   = 8,
+                min_silence_frame  = 10,
+            )
+            _vad_model = FireRedStreamVad.from_pretrained(model_dir, cfg)
+            print(f"[VAD] Modèle chargé depuis : {model_dir}")
+    return _vad_model
 
-    # État interne
-    _state:          _VadState  = field(default=_VadState.SILENCE, init=False)
-    _speech_buffer:  list       = field(default_factory=list, init=False)
-    _silence_count:  int        = field(default=0, init=False)
-    _speech_start:   float      = field(default=0.0, init=False)
 
-    def process(self, chunk: np.ndarray) -> None:
-        """Traite un chunk et met une utterance dans la queue si elle est terminée."""
-        rms = float(np.sqrt(np.mean(chunk ** 2)))
-        is_voice = rms > self.energy_threshold
+# ── Enregistrement avec VAD ──────────────────────────────────────────────────
 
-        if self._state == _VadState.SILENCE:
-            if is_voice:
-                self._state       = _VadState.SPEAKING
-                self._speech_buffer = [chunk.copy()]
-                self._silence_count = 0
-                self._speech_start  = time.time()
-                print("\n🎙️  Parole détectée…", end="", flush=True)
+def record_on_speech(
+    model_dir: str         = "models/stream_VAD",
+    use_gpu: bool          = False,
+    max_silence_sec: float = MAX_SILENCE_SEC,
+    mic_device: Optional[int] = None,
+) -> np.ndarray:
+    """
+    Bloque jusqu'à la fin d'une session de parole et retourne
+    un numpy array float32 16 kHz (prêt pour Whisper).
 
-        elif self._state == _VadState.SPEAKING:
-            self._speech_buffer.append(chunk.copy())
-            elapsed = time.time() - self._speech_start
+    Une session commence au premier frame de parole détecté et se termine
+    après `max_silence_sec` secondes de silence consécutif.
+    """
+    vad = load_stream_vad(model_dir, use_gpu)
+    vad.reset()   # réinitialise l'état interne entre chaque session
 
-            if is_voice:
-                self._silence_count = 0
-                print(".", end="", flush=True)  # indicateur visuel
+    audio_q: Queue[np.ndarray] = Queue()
+    pre_roll: deque             = deque(maxlen=PRE_ROLL_FRAMES)
+
+    # ── callback micro : reçoit des blocs int16 mono ──
+    def _callback(indata, frames, time_info, status):
+        if status:
+            print(f"[MIC] {status}")
+        audio_q.put(indata[:, 0].copy())   # int16 [N]
+
+    # ── générateur de frames exactement FRAME_LENGTH samples (400) ──
+    # avec un pas de FRAME_SHIFT (160) pour ne pas perdre de signal
+    remainder = np.array([], dtype=np.int16)
+
+    def iter_frames():
+        nonlocal remainder
+        while True:
+            chunk    = audio_q.get()
+            combined = np.concatenate([remainder, chunk])
+
+            n_frames = max(0, (len(combined) - FRAME_LENGTH) // FRAME_SHIFT + 1)
+            for i in range(n_frames):
+                start = i * FRAME_SHIFT
+                yield combined[start : start + FRAME_LENGTH]
+
+            # garder les samples non encore consommés
+            consumed  = n_frames * FRAME_SHIFT
+            remainder = combined[consumed:]
+
+    print("[VAD] En écoute…")
+
+    speech_buffer: list[np.ndarray] = []
+    in_session    = False
+    silence_start: Optional[float]  = None
+
+    with sd.InputStream(
+        samplerate = SAMPLE_RATE,
+        channels   = CHANNELS,
+        dtype      = DTYPE,
+        blocksize  = FRAME_SHIFT * 4,   # livraison fréquente → faible latence
+        device     = mic_device,
+        callback   = _callback,
+    ):
+        for frame in iter_frames():
+            # detect_frame() attend exactement FRAME_LENGTH_SAMPLE (400) samples int16
+            result    = vad.detect_frame(frame)
+            is_speech = bool(result.is_speech)
+
+            pre_roll.append(frame.copy())
+
+            if is_speech:
+                if not in_session:
+                    in_session    = True
+                    silence_start = None
+                    # pre-roll sans le frame courant (déjà ajouté ci-dessous)
+                    speech_buffer.extend(list(pre_roll)[:-1])
+                    print("[VAD] ▶ Parole détectée – enregistrement…")
+
+                silence_start = None
+                speech_buffer.append(frame)
+
             else:
-                self._silence_count += 1
+                if in_session:
+                    speech_buffer.append(frame)
+                    if silence_start is None:
+                        silence_start = time.monotonic()
+                    elif time.monotonic() - silence_start >= max_silence_sec:
+                        print(f"[VAD] ⏹  Silence > {max_silence_sec}s – session terminée.")
+                        break
 
-            # ── Fin d'énoncé : silence prolongé ──
-            if self._silence_count >= self.silence_chunks:
-                self._finalize()
+    if not speech_buffer:
+        return np.array([], dtype=np.float32)
 
-            # ── Coupure forcée : trop long ──
-            elif elapsed >= self.max_speech_sec:
-                print(f"\n⚠️  Coupure après {self.max_speech_sec:.0f}s de parole continue")
-                self._finalize()
+    # int16 → float32 normalisé [-1, 1] pour Whisper
+    audio_int16 = np.concatenate(speech_buffer)
+    audio_fp32  = audio_int16.astype(np.float32) / 32768.0
 
-    def _finalize(self) -> None:
-        """Valide et enqueue l'utterance courante, puis reset l'état."""
-        if len(self._speech_buffer) >= self.min_speech_chunks:
-            audio = np.concatenate(self._speech_buffer, axis=0)
-            self.utterance_queue.put(audio)
-            duration = len(audio) / SAMPLE_RATE
-            print(f"\n✅ Énoncé capturé ({duration:.1f}s), transcription en cours…")
-        else:
-            print("\n⊘ Segment trop court, ignoré")
-
-        self._state         = _VadState.SILENCE
-        self._speech_buffer = []
-        self._silence_count = 0
+    duration = len(audio_fp32) / SAMPLE_RATE
+    print(f"[VAD] Capturé : {duration:.2f}s | {len(audio_fp32)} samples | float32")
+    return audio_fp32
 
 
-# ─────────────────────────────────────────────
-# Worker de transcription
-# ─────────────────────────────────────────────
+# ── Workers ──────────────────────────────────────────────────────────────────
 
-def _transcription_worker(
-    utterance_queue:  Queue,
-    stop_event:       threading.Event,
-    on_final:         Callable[[str], None],
-    on_partial:       Optional[Callable[[str], None]] = None,
-    language:         str = "fr",
-) -> None:
-    """
-    Consomme les utterances et appelle `on_final(text)` pour chaque résultat.
-    `on_partial` est appelé avec les segments intermédiaires si disponible.
-    """
-    model = _load_model()
-    dev   = cfg_device()
-
-    transcribe_opts = {
-        "language": language,
-        "fp16":     dev == "gpu",
-        "beam_size": 5,
-        "best_of":   5,
-        "task":      "transcribe",
-        "verbose":   False,
-        # Retourner les segments permet un retour partiel
-        "word_timestamps": False,
-    }
-
-    print(f"[STT Worker] Prêt (device={dev}, lang={language})")
-
-    while not stop_event.is_set() or not utterance_queue.empty():
+def recording_worker(
+    audio_queue: Queue,
+    stop_event: threading.Event,
+    model_dir: str         = "models/stream_VAD",
+    use_gpu: bool          = False,
+    max_silence_sec: float = MAX_SILENCE_SEC,
+):
+    """Thread dédié à l'enregistrement. Pousse chaque session dans audio_queue."""
+    while not stop_event.is_set():
         try:
-            audio = utterance_queue.get(timeout=0.5)
+            audio = record_on_speech(
+                model_dir       = model_dir,
+                use_gpu         = use_gpu,
+                max_silence_sec = max_silence_sec,
+            )
+            if len(audio) == 0:
+                continue
+
+            while not stop_event.is_set():
+                try:
+                    audio_queue.put(audio, timeout=1)
+                    break
+                except Exception:
+                    continue   # queue pleine, on réessaie
+
+        except Exception as e:
+            print(f"❌ Erreur enregistrement : {e}")
+
+
+def transcription_worker(
+    audio_queue: Queue,
+    stop_event: threading.Event,
+    callback=None,
+):
+    """Thread dédié à la transcription Whisper. Consomme audio_queue."""
+    mdl         = load_model()
+    device_name = device()
+
+    transcribe_options = {
+        "fp16"     : device_name == "gpu",
+        "language" : "fr",
+        "beam_size": 5,
+        "best_of"  : 5,
+    }
+    print(f"🔧 Transcription : fp16={transcribe_options['fp16']}")
+
+    while not stop_event.is_set() or not audio_queue.empty():
+        try:
+            audio = audio_queue.get(timeout=1)
         except Empty:
             continue
 
-        t0 = time.time()
         try:
-            result = model.transcribe(audio, **transcribe_opts)
-        except Exception as exc:
-            print(f"[STT] Erreur transcription : {exc}")
-            utterance_queue.task_done()
-            continue
+            print("🔄 Transcription en cours…")
+            t0     = time.time()
+            result = mdl.transcribe(audio, **transcribe_options)
+            print(f"⏱️  {time.time() - t0:.2f}s  |  📝 {result['text']}\n")
 
-        elapsed = time.time() - t0
-        full_text = result["text"].strip()
+            if callback:
+                callback(result["text"])
 
-        # Retour partiel segment par segment
-        if on_partial and result.get("segments"):
-            for seg in result["segments"]:
-                seg_text = seg["text"].strip()
-                if seg_text:
-                    on_partial(seg_text)
+            if device_name == "gpu":
+                torch.cuda.empty_cache()
 
-        if full_text:
-            print(f"\n📝 [{elapsed:.2f}s] {full_text}")
-            on_final(full_text)
-        else:
-            print("\n⊘ Résultat vide, ignoré")
-
-        # Libération mémoire GPU
-        if dev == "gpu":
-            torch.cuda.empty_cache()
-
-        utterance_queue.task_done()
-
-    print("[STT Worker] Arrêt")
+        except Exception as e:
+            print(f"❌ Erreur transcription : {e}")
+        finally:
+            audio_queue.task_done()
 
 
-# ─────────────────────────────────────────────
-# Entrée publique : transcription_loop
-# ─────────────────────────────────────────────
+# ── Point d'entrée public ────────────────────────────────────────────────────
 
 def transcription_loop(
-    interval:          int                         = 30,   # ignoré (kept for API compat)
-    callback:          Optional[Callable[[str], None]] = None,
-    partial_callback:  Optional[Callable[[str], None]] = None,
-    language:          str                         = "fr",
-    energy_threshold:  float                       = VAD_ENERGY_THRESHOLD,
-    silence_duration:  float                       = VAD_SILENCE_CHUNKS * CHUNK_MS / 1000,
-) -> None:
+    callback=None,
+    model_dir: str         = "models/stream_VAD",
+    use_gpu: bool          = True,
+    max_silence_sec: float = MAX_SILENCE_SEC,
+):
     """
-    Boucle de transcription continue avec VAD temps réel.
-
-    Args:
-        interval:         Ignoré (compat. avec l'ancienne API) — la détection est
-                          maintenant automatique.
-        callback:         Appelé avec le texte final de chaque énoncé.
-        partial_callback: Appelé avec les segments intermédiaires (optionnel).
-        language:         Langue pour Whisper (ex: "fr", "en").
-        energy_threshold: Seuil RMS pour détecter la parole (0.0–1.0).
-        silence_duration: Durée de silence (secondes) avant de clore un énoncé.
+    Lance enregistrement + transcription en parallèle (deux threads daemon).
+    Appelle callback(texte) à chaque session transcrite.
+    Arrêt propre sur Ctrl+C.
     """
+    # Pré-charger les modèles dans le thread principal (évite les races)
+    load_stream_vad(model_dir, use_gpu)
+    load_model()
 
-    utterance_queue = Queue(maxsize=8)
-    stop_event      = threading.Event()
+    audio_queue = Queue(maxsize=3)
+    stop_event  = threading.Event()
 
-    silence_chunks = max(1, int(silence_duration * 1000 / CHUNK_MS))
-    vad = VADProcessor(
-        utterance_queue   = utterance_queue,
-        energy_threshold  = energy_threshold,
-        silence_chunks    = silence_chunks,
+    recorder_thread = threading.Thread(
+        target = recording_worker,
+        kwargs = dict(
+            audio_queue     = audio_queue,
+            stop_event      = stop_event,
+            model_dir       = model_dir,
+            use_gpu         = use_gpu,
+            max_silence_sec = max_silence_sec,
+        ),
+        daemon = True,
+        name   = "AudioRecorder",
+    )
+    transcriber_thread = threading.Thread(
+        target = transcription_worker,
+        kwargs = dict(
+            audio_queue = audio_queue,
+            stop_event  = stop_event,
+            callback    = callback,
+        ),
+        daemon = True,
+        name   = "AudioTranscriber",
     )
 
-    # ── Thread de transcription ──
-    transcriber = threading.Thread(
-        target     = _transcription_worker,
-        args       = (utterance_queue, stop_event, callback, partial_callback, language),
-        daemon     = True,
-        name       = "STT-Transcriber",
-    )
-    transcriber.start()
-
-    # ── Buffer inter-thread pour sounddevice ──
-    raw_queue: Queue = Queue(maxsize=200)  # ~20s de tampon max
-
-    def _audio_callback(indata: np.ndarray, frames: int, t, status) -> None:
-        """Callback sounddevice — s'exécute dans le thread audio OS."""
-        if status:
-            print(f"[Audio] {status}", flush=True)
-        chunk = indata[:, 0].copy()   # mono
-        try:
-            raw_queue.put_nowait(chunk)
-        except Exception:
-            pass  # buffer plein → on lâche le chunk
-
-    print("🚀 Démarrage de la transcription en temps réel…")
-    print(f"   Seuil énergie : {energy_threshold}  |  Silence : {silence_duration:.1f}s")
+    print("🚀 Transcription continue démarrée")
+    print(f"   Device      : {device()}")
+    print(f"   Silence max : {max_silence_sec}s")
     print("   (Ctrl+C pour arrêter)\n")
 
-    # ── Thread VAD (consomme raw_queue → vad.process) ──
-    def _vad_loop() -> None:
-        while not stop_event.is_set():
-            try:
-                chunk = raw_queue.get(timeout=0.3)
-                vad.process(chunk)
-            except Empty:
-                continue
-        print("[VAD] Arrêt")
+    recorder_thread.start()
+    transcriber_thread.start()
 
-    vad_thread = threading.Thread(target=_vad_loop, daemon=True, name="STT-VAD")
-    vad_thread.start()
-
-    # ── Flux audio principal (bloquant) ──
     try:
-        with sd.InputStream(
-            samplerate = SAMPLE_RATE,
-            channels   = 1,
-            dtype      = "float32",
-            blocksize  = CHUNK_SAMPLES,
-            callback   = _audio_callback,
-        ):
-            print("🎤 Micro ouvert — parlez !")
-            while not stop_event.is_set():
-                time.sleep(0.1)
+        while recorder_thread.is_alive() or transcriber_thread.is_alive():
+            recorder_thread.join(timeout=1)
+            transcriber_thread.join(timeout=1)
 
     except KeyboardInterrupt:
         print("\n🛑 Arrêt…")
-    finally:
         stop_event.set()
-        vad_thread.join(timeout=2.0)
-        # Attendre que la queue soit vidée
-        utterance_queue.join()
-        transcriber.join(timeout=5.0)
-        if cfg_device() == "gpu":
+        recorder_thread.join(timeout=5)
+        transcriber_thread.join(timeout=10)
+        if device() == "gpu":
             torch.cuda.empty_cache()
-        print("✓ Transcription arrêtée")
+        print("✓ Arrêt terminé")
 
-
-# ─────────────────────────────────────────────
-# Test standalone
-# ─────────────────────────────────────────────
 
 if __name__ == "__main__":
-    def on_text(text: str) -> None:
-        print(f"\n>>> CALLBACK: {text}\n")
-
-    def on_partial(text: str) -> None:
-        print(f"  … {text}", end="\r", flush=True)
-
-    transcription_loop(
-        callback         = on_text,
-        partial_callback = on_partial,
-        language         = "fr",
-    )
+    transcription_loop()

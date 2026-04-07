@@ -103,7 +103,7 @@ def send_text(texts: str):
     chucks = []
 
     for chuck in _chat.generate_response(
-        format_system_prompt(texts, "arch").replace("*", ""),
+        format_system_prompt(texts).replace("*", ""),
         # Paramètres recommandés pour Gemma 4
         temperature=1.0,
         top_p=0.95,
