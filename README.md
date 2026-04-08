@@ -66,6 +66,10 @@ Gemma4 26B A4B
 Phi-4-mini-QAT_4b 
 ```
 
+### VAD 
+
+FireRedTeamVAD
+
 ---
 
 ## 🧰 Installation & Run / main script
