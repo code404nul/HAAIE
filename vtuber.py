@@ -22,6 +22,7 @@ from utils.toxic_eval import MultilingualToxicityEvaluator
 from utils.llm import Gemma4                          # ← Gemma 4
 from utils.prompter import format_system_prompt
 from utils import split_sentence
+from utils.logger import log # don't use this when use this project with sensitive information. For debug case only !
 import os
 import time
 import threading
@@ -101,6 +102,7 @@ def send_text(texts: str):
 
     print("[INFO] Génération Gemma 4 en cours...")
     chucks = []
+    full_output = []
 
     for chuck in _chat.generate_response(
         format_system_prompt(texts).replace("*", ""),
@@ -121,6 +123,7 @@ def send_text(texts: str):
             if not sentence:
                 continue
 
+            full_output.append(sentence)
             print(sentence, end="", flush=True)
 
             try:
@@ -140,9 +143,11 @@ def send_text(texts: str):
             try:
                 if not _toxicity_evaluator.filter_toxic_content(sentence)["toxic"]:
                     Live2DViewer.send_text(sentence)
+                    full_output.append(sentence)
             except Exception as e:
                 print(f"\n[VTuber] Erreur envoi reste : {e}")
 
+    log(texts, " ".join(full_output))
     return True
 
 
