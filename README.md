@@ -12,6 +12,8 @@
 
 It’s *not* meant to replace human interaction, but to help users **relearn communication and emotional expression** in a safe, private, and non-commercial way.
 
+[Presentation video (outdated)](https://youtu.be/FLsagVb-94A?si=6h6GwKA9KpBgneZt)
+
 ---
 
 ## 🎯 Goals
@@ -77,7 +79,7 @@ FireRedTeamVAD
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/yourusername/HAAIE.git
+git clone https://github.com/code404nul/HAAIE.git
 cd HAAIE
 ```
 
